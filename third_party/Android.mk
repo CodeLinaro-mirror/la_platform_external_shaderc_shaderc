@@ -9,7 +9,7 @@ GLSLANG_DEFINES:= -DAMD_EXTENSIONS $(GLSLANG_OS_FLAGS)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE:=SPIRV
-LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti $(GLSLANG_DEFINES)
+LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti -Werror $(GLSLANG_DEFINES)
 LOCAL_EXPORT_C_INCLUDES:=$(GLSLANG_LOCAL_PATH)
 LOCAL_SRC_FILES:= \
 	SPIRV/GlslangToSpv.cpp \
@@ -48,6 +48,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:=HLSL
 LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti
 LOCAL_SRC_FILES:= \
+		hlsl/hlslAttributes.cpp \
 		hlsl/hlslGrammar.cpp \
 		hlsl/hlslOpMap.cpp \
 		hlsl/hlslParseables.cpp \
@@ -160,6 +161,19 @@ $(SPVTOOLS_LOCAL_PATH)/source/software_version.cpp: $(1)/build-version.inc
 endef
 $(eval $(call gen_spvtools_build_version_inc,$(SPVTOOLS_OUT_PATH)))
 
+define gen_spvtools_generators_inc
+$(call generate-file-dir,$(1)/dummy_filename)
+$(1)/generators.inc: \
+        $(SPVTOOLS_LOCAL_PATH)/utils/generate_registry_tables.py \
+        $(SPVHEADERS_LOCAL_PATH)/include/spirv/spir-v.xml
+		@$(HOST_PYTHON) $(SPVTOOLS_LOCAL_PATH)/utils/generate_registry_tables.py \
+		                --xml=$(SPVHEADERS_LOCAL_PATH)/include/spirv/spir-v.xml \
+				--generator-output=$(1)/generators.inc
+		@echo "[$(TARGET_ARCH_ABI)] Generate       : generators.inc <= spir-v.xml"
+$(SPVTOOLS_LOCAL_PATH)/source/opcode.cpp: $(1)/generators.inc
+endef
+$(eval $(call gen_spvtools_generators_inc,$(SPVTOOLS_OUT_PATH)))
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := SPIRV-Tools
 LOCAL_C_INCLUDES := \
@@ -169,18 +183,18 @@ LOCAL_C_INCLUDES := \
 		$(SPVTOOLS_OUT_PATH)
 LOCAL_EXPORT_C_INCLUDES := \
 		$(SPVTOOLS_LOCAL_PATH)/include
-LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti
+LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti -Werror
 LOCAL_SRC_FILES:= \
 		source/assembly_grammar.cpp \
 		source/binary.cpp \
 		source/diagnostic.cpp \
 		source/disassemble.cpp \
 		source/ext_inst.cpp \
-		source/instruction.cpp \
 		source/libspirv.cpp \
 		source/name_mapper.cpp \
 		source/opcode.cpp \
 		source/operand.cpp \
+		source/parsed_operand.cpp \
 		source/print.cpp \
 		source/software_version.cpp \
 		source/spirv_endian.cpp \
@@ -189,13 +203,14 @@ LOCAL_SRC_FILES:= \
 		source/text.cpp \
 		source/text_handler.cpp \
 		source/util/parse_number.cpp \
-		source/val/BasicBlock.cpp \
-		source/val/Construct.cpp \
-		source/val/Function.cpp \
-		source/val/Instruction.cpp \
-		source/val/ValidationState.cpp \
+		source/val/basic_block.cpp \
+		source/val/construct.cpp \
+		source/val/function.cpp \
+		source/val/instruction.cpp \
+		source/val/validation_state.cpp \
 		source/validate.cpp \
 		source/validate_cfg.cpp \
+		source/validate_datarules.cpp \
 		source/validate_id.cpp \
 		source/validate_instruction.cpp \
 		source/validate_layout.cpp
@@ -207,7 +222,7 @@ LOCAL_C_INCLUDES := \
 		$(SPVTOOLS_LOCAL_PATH)/include \
 		$(SPVTOOLS_LOCAL_PATH)/source \
 		$(SPVTOOLS_LOCAL_PATH)/external/spirv-headers/include
-LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti
+LOCAL_CXXFLAGS:=-std=c++11 -fno-exceptions -fno-rtti -Werror
 LOCAL_STATIC_LIBRARIES:=SPIRV-Tools
 LOCAL_SRC_FILES:= \
 		source/opt/build_module.cpp \
