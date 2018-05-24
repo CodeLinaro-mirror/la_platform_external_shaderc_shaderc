@@ -34,20 +34,11 @@ const char kVertexShader[] =
     "#version 140\n"
     "void main() {}";
 
-// A shader that compiles under OpenGL compatibility profile rules,
-// but not OpenGL core profile rules.
+// A shader that parses under OpenGL compatibility profile rules.
+// It does not compile because Glslang does not support SPIR-V
+// code generation for OpenGL compatibility profile.
 const char kOpenGLCompatibilityFragShader[] =
     R"(#version 140
-       uniform highp sampler2D tex;
-       void main() {
-         gl_FragColor = texture2D(tex, vec2(0.0,0.0));
-       })";
-
-// A shader that compiles under OpenGL compatibility profile rules,
-// but not OpenGL core profile rules, even when deducing the stage.
-const char kOpenGLCompatibilityFragShaderDeducibleStage[] =
-    R"(#version 140
-       #pragma shader_stage(fragment)
        uniform highp sampler2D tex;
        void main() {
          gl_FragColor = texture2D(tex, vec2(0.0,0.0));
@@ -104,6 +95,26 @@ const char kGlslFragShaderNoExplicitBinding[] =
          float x = my_ubo.x;
        })";
 
+// A GLSL vertex shader with the location defined for its non-opaque uniform
+// variable.
+const char kGlslVertShaderExplicitLocation[] =
+    R"(#version 450
+       layout(location = 10) uniform mat4 my_mat;
+       layout(location = 0) in vec4 my_vec;
+       void main(void) {
+         gl_Position = my_mat * my_vec;
+       })";
+
+// A GLSL vertex shader without the location defined for its non-opaque uniform
+// variable.
+const char kGlslVertShaderNoExplicitLocation[] =
+    R"(#version 450
+       uniform mat4 my_mat;
+       layout(location = 0) in vec4 my_vec;
+       void main(void) {
+         gl_Position = my_mat * my_vec;
+       })";
+
 // A GLSL vertex shader with a weirdly packed block.
 const char kGlslShaderWeirdPacking[] =
     R"(#version 450
@@ -130,6 +141,14 @@ float4 main(float2 loc: A) : SV_Target {
 
  return sampleTexture(cts, loc);
 })";
+
+const char kHlslShaderWithCounterBuffer[] = R"(
+RWStructuredBuffer<float4> Ainc;
+float4 main() : SV_Target0 {
+  return float4(Ainc.IncrementCounter(), 0, 0, 0);
+}
+)";
+
 
 // Returns the disassembly of the given SPIR-V binary, as a string.
 // Assumes the disassembly will be successful when targeting Vulkan.
@@ -235,46 +254,6 @@ TEST_F(CompilerTest, SimpleVulkanShaderCompilesWithDefaultCompilerSettings) {
   EXPECT_TRUE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
 }
 
-TEST_F(CompilerTest, RespectTargetEnvOnOpenGLCompatibilityShader) {
-  const EShLanguage stage = EShLangFragment;
-
-  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGLCompat);
-  EXPECT_TRUE(SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader, stage));
-  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
-  EXPECT_FALSE(
-      SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader, stage));
-  compiler_.SetTargetEnv(Compiler::TargetEnv::Vulkan);
-  EXPECT_FALSE(
-      SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader, stage));
-  // Default compiler.
-  compiler_ = Compiler();
-  EXPECT_FALSE(
-      SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader, stage));
-}
-
-TEST_F(CompilerTest,
-       RespectTargetEnvOnOpenGLCompatibilityShaderWhenDeducingStage) {
-  const EShLanguage stage = EShLangCount;
-
-  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGLCompat);
-  EXPECT_TRUE(SimpleCompilationSucceeds(
-      kOpenGLCompatibilityFragShaderDeducibleStage, stage))
-      << errors_;
-  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
-  EXPECT_FALSE(SimpleCompilationSucceeds(
-      kOpenGLCompatibilityFragShaderDeducibleStage, stage))
-      << errors_;
-  compiler_.SetTargetEnv(Compiler::TargetEnv::Vulkan);
-  EXPECT_FALSE(SimpleCompilationSucceeds(
-      kOpenGLCompatibilityFragShaderDeducibleStage, stage))
-      << errors_;
-  // Default compiler.
-  compiler_ = Compiler();
-  EXPECT_FALSE(SimpleCompilationSucceeds(
-      kOpenGLCompatibilityFragShaderDeducibleStage, stage))
-      << errors_;
-}
-
 TEST_F(CompilerTest, RespectTargetEnvOnOpenGLShader) {
   const EShLanguage stage = EShLangVertex;
 
@@ -312,13 +291,14 @@ TEST_F(CompilerTest, VulkanSpecificShaderFailsUnderOpenGLRules) {
   EXPECT_FALSE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
 }
 
-TEST_F(CompilerTest, OpenGLCompatibilitySpecificShaderFailsUnderDefaultRules) {
-  EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader,
-                                         EShLangFragment));
-}
-
 TEST_F(CompilerTest, OpenGLSpecificShaderFailsUnderDefaultRules) {
   EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLVertexShader, EShLangVertex));
+}
+
+TEST_F(CompilerTest, OpenGLCompatibilitySpecificShaderFailsUnderOpenGLRules) {
+  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
+  EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader,
+                                         EShLangFragment));
 }
 
 TEST_F(CompilerTest, OpenGLCompatibilitySpecificShaderFailsUnderVulkanRules) {
@@ -330,6 +310,19 @@ TEST_F(CompilerTest, OpenGLCompatibilitySpecificShaderFailsUnderVulkanRules) {
 TEST_F(CompilerTest, OpenGLSpecificShaderFailsUnderVulkanRules) {
   compiler_.SetTargetEnv(Compiler::TargetEnv::Vulkan);
   EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLVertexShader, EShLangVertex));
+}
+
+TEST_F(CompilerTest, BadTargetEnvFails) {
+  compiler_.SetTargetEnv(static_cast<Compiler::TargetEnv>(32767));
+  EXPECT_FALSE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
+  EXPECT_THAT(errors_, HasSubstr("Invalid target client environment 32767"));
+}
+
+TEST_F(CompilerTest, BadTargetEnvVersionFails) {
+  compiler_.SetTargetEnv(Compiler::TargetEnv::Vulkan, 123);
+  EXPECT_FALSE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
+  EXPECT_THAT(errors_,
+              HasSubstr("Invalid target client version 123 for environment 0"));
 }
 
 TEST_F(CompilerTest, AddMacroDefinition) {
@@ -472,8 +465,8 @@ INSTANTIATE_TEST_CASE_P(
 // offset.
 std::string ShaderWithTexOffset(int offset) {
   std::ostringstream oss;
-  oss << "#version 150\n"
-         "uniform sampler1D tex;\n"
+  oss << "#version 450\n"
+         "layout (binding=0) uniform sampler1D tex;\n"
          "void main() { vec4 x = textureOffset(tex, 1.0, "
       << offset << "); }\n";
   return oss.str();
@@ -511,28 +504,12 @@ TEST_F(CompilerTest, GeneratorWordIsShadercOverGlslang) {
   EXPECT_EQ(shaderc_over_glslang, words[generator_word_index] >> 16u);
 }
 
-TEST_F(CompilerTest, DefaultsDoNotSetBindings) {
-  const auto words = SimpleCompilationBinary(kGlslFragShaderNoExplicitBinding,
-                                             EShLangFragment);
-  const auto disassembly = Disassemble(words);
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_tex Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_sam Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_img Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_imbuf Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_ubo Binding")));
-}
-
-TEST_F(CompilerTest, NoAutoMapBindingsDoesNotSetBindings) {
+TEST_F(CompilerTest, NoBindingsAndNoAutoMapBindingsFailsCompile) {
   compiler_.SetAutoBindUniforms(false);
-  const auto words = SimpleCompilationBinary(kGlslFragShaderNoExplicitBinding,
-                                             EShLangFragment);
-  const auto disassembly = Disassemble(words);
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_tex Binding")))
-      << disassembly;
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_sam Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_img Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_imbuf Binding")));
-  EXPECT_THAT(disassembly, Not(HasSubstr("OpDecorate %my_ubo Binding")));
+  EXPECT_FALSE(SimpleCompilationSucceeds(kGlslFragShaderNoExplicitBinding,
+                                         EShLangFragment));
+  EXPECT_THAT(errors_,
+              HasSubstr("sampler/texture/image requires layout(binding=X)"));
 }
 
 TEST_F(CompilerTest, AutoMapBindingsSetsBindings) {
@@ -636,6 +613,37 @@ TEST_F(CompilerTest, AutoMapBindingsSetsBindingsSetFragImageBindingBaseCompiledA
   EXPECT_THAT(disassembly, HasSubstr("OpDecorate %my_ubo Binding 4"));
 }
 
+TEST_F(CompilerTest, NoAutoMapLocationsFailsCompilationOnOpenGLShader) {
+  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
+  compiler_.SetAutoMapLocations(false);
+
+  const auto words = SimpleCompilationBinary(kGlslVertShaderExplicitLocation,
+                                             EShLangVertex);
+  const auto disassembly = Disassemble(words);
+  EXPECT_THAT(disassembly, HasSubstr("OpDecorate %my_mat Location 10"))
+      << disassembly;
+
+  EXPECT_FALSE(
+      SimpleCompilationSucceeds(kGlslVertShaderNoExplicitLocation, EShLangVertex));
+}
+
+TEST_F(CompilerTest, AutoMapLocationsSetsLocationsOnOpenGLShader) {
+  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
+  compiler_.SetAutoMapLocations(true);
+
+  const auto words_no_auto =
+      SimpleCompilationBinary(kGlslVertShaderExplicitLocation, EShLangVertex);
+  const auto disassembly_no_auto = Disassemble(words_no_auto);
+  EXPECT_THAT(disassembly_no_auto, HasSubstr("OpDecorate %my_mat Location 10"))
+      << disassembly_no_auto;
+
+  const auto words_auto =
+      SimpleCompilationBinary(kGlslVertShaderNoExplicitLocation, EShLangVertex);
+  const auto disassembly_auto = Disassemble(words_auto);
+  EXPECT_THAT(disassembly_auto, HasSubstr("OpDecorate %my_mat Location 0"))
+      << disassembly_auto;
+}
+
 TEST_F(CompilerTest, EmitMessageTextOnlyOnce) {
   // Emit a warning by compiling a shader without a default entry point name.
   // The warning should only be emitted once even though we do parsing, linking,
@@ -709,6 +717,21 @@ TEST_F(CompilerTest, HlslLegalizationDisabled) {
       SimpleCompilationBinary(kHlslShaderForLegalizationTest, EShLangFragment);
   const auto disassembly = Disassemble(words);
   EXPECT_THAT(disassembly, HasSubstr("OpFunctionCall")) << disassembly;
+}
+
+TEST_F(CompilerTest, HlslFunctionality1Enabled) {
+  compiler_.SetSourceLanguage(Compiler::SourceLanguage::HLSL);
+  compiler_.EnableHlslFunctionality1(true);
+  const auto words =
+      SimpleCompilationBinary(kHlslShaderWithCounterBuffer, EShLangFragment);
+  const auto disassembly = Disassemble(words);
+  EXPECT_THAT(disassembly,
+              HasSubstr("OpExtension \"SPV_GOOGLE_hlsl_functionality1\""))
+      << disassembly;
+  EXPECT_THAT(disassembly,
+              HasSubstr("OpDecorateStringGOOGLE %_entryPointOutput "
+                        "HlslSemanticGOOGLE \"SV_TARGET0\""))
+      << disassembly;
 }
 
 }  // anonymous namespace

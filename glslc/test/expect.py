@@ -116,7 +116,7 @@ class NoGeneratedFiles(GlslCTest):
 class CorrectObjectFilePreamble(GlslCTest):
     """Provides methods for verifying preamble for a SPV object file."""
 
-    def verify_object_file_preamble(self, filename):
+    def verify_object_file_preamble(self, filename, spv_version = 0x10000):
         """Checks that the given SPIR-V binary file has correct preamble."""
 
         def read_word(binary, index, little_endian):
@@ -163,11 +163,15 @@ class CorrectObjectFilePreamble(GlslCTest):
                 return False, 'Incorrect SPV binary: wrong magic number'
 
             # SPIR-V version number
-            if read_word(preamble, 1, little_endian) != 0x00010000:
+            version = read_word(preamble, 1, little_endian)
+            # TODO(dneto): Recent Glslang uses version word 0 for opengl_compat
+            # profile
+
+            if version != spv_version and version != 0:
                 return False, 'Incorrect SPV binary: wrong version number'
             # Shaderc-over-Glslang (0x000d....) or
             # SPIRV-Tools (0x0007....) generator number
-            if read_word(preamble, 2, little_endian) != 0x000d0002 and \
+            if read_word(preamble, 2, little_endian) != 0x000d0006 and \
                     read_word(preamble, 2, little_endian) != 0x00070000:
                 return False, ('Incorrect SPV binary: wrong generator magic '
                                'number')
@@ -193,15 +197,15 @@ class CorrectAssemblyFilePreamble(GlslCTest):
 
         if (line1 != '; SPIR-V\n' or
             line2 != '; Version: 1.0\n' or
-            line3 != '; Generator: Google Shaderc over Glslang; 2\n'):
+            (not line3.startswith('; Generator: Google Shaderc over Glslang;'))):
             return False, 'Incorrect SPV assembly'
 
         return True, ''
 
 
 class ValidObjectFile(SuccessfulReturn, CorrectObjectFilePreamble):
-    """Mixin class for checking that every input file generates a valid object
-    file following the object file naming rule, and there is no output on
+    """Mixin class for checking that every input file generates a valid SPIR-V 1.0
+    object file following the object file naming rule, and there is no output on
     stdout/stderr."""
 
     def check_object_file_preamble(self, status):
@@ -209,6 +213,22 @@ class ValidObjectFile(SuccessfulReturn, CorrectObjectFilePreamble):
             object_filename = get_object_filename(input_filename)
             success, message = self.verify_object_file_preamble(
                 os.path.join(status.directory, object_filename))
+            if not success:
+                return False, message
+        return True, ''
+
+
+class ValidObjectFile1_3(SuccessfulReturn, CorrectObjectFilePreamble):
+    """Mixin class for checking that every input file generates a valid SPIR-V 1.3
+    object file following the object file naming rule, and there is no output on
+    stdout/stderr."""
+
+    def check_object_file_preamble(self, status):
+        for input_filename in status.input_filenames:
+            object_filename = get_object_filename(input_filename)
+            success, message = self.verify_object_file_preamble(
+                os.path.join(status.directory, object_filename),
+                0x10300)
             if not success:
                 return False, message
         return True, ''
