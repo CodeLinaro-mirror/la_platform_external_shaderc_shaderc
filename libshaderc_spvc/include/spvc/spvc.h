@@ -72,10 +72,97 @@ typedef enum {
   shaderc_spvc_status_validation_error,
   shaderc_spvc_status_transformation_error,
   shaderc_spvc_status_configuration_error,
+  shaderc_spvc_status_uninitialized_compiler_error,
+  shaderc_spvc_status_missing_context_error,
+  shaderc_spvc_status_invalid_out_param,
 } shaderc_spvc_status;
+
+typedef enum {
+  shaderc_spvc_execution_model_vertex,
+  shaderc_spvc_execution_model_fragment,
+  shaderc_spvc_execution_model_glcompute,
+  shaderc_spvc_execution_model_invalid,
+} shaderc_spvc_execution_model;
+
+typedef enum {
+  shaderc_spvc_binding_type_uniform_buffer = 0x00000000,
+  shaderc_spvc_binding_type_storage_buffer = 0x00000001,
+  shaderc_spvc_binding_type_readonly_storage_buffer = 0x00000002,
+  shaderc_spvc_binding_type_sampler = 0x00000003,
+  shaderc_spvc_binding_type_sampled_texture = 0x00000004,
+  shaderc_spvc_binding_type_storage_texture = 0x00000005,
+} shaderc_spvc_binding_type;
+
+typedef enum {
+  shaderc_spvc_texture_view_dimension_undefined = 0x00000000,
+  shaderc_spvc_texture_view_dimension_e1D = 0x00000001,
+  shaderc_spvc_texture_view_dimension_e2D = 0x00000002,
+  shaderc_spvc_texture_view_dimension_e2D_array = 0x00000003,
+  shaderc_spvc_texture_view_dimension_cube = 0x00000004,
+  shaderc_spvc_texture_view_dimension_cube_array = 0x00000005,
+  shaderc_spvc_texture_view_dimension_e3D = 0x00000006,
+} shaderc_spvc_texture_view_dimension;
+
+typedef enum {
+  shaderc_spvc_texture_format_type_float,
+  shaderc_spvc_texture_format_type_sint,
+  shaderc_spvc_texture_format_type_uint,
+  shaderc_spvc_texture_format_type_other,
+} shaderc_spvc_texture_format_type;
+
+typedef enum {
+  shaderc_spvc_shader_resource_uniform_buffers,
+  shaderc_spvc_shader_resource_separate_images,
+  shaderc_spvc_shader_resource_separate_samplers,
+  shaderc_spvc_shader_resource_storage_buffers,
+} shaderc_spvc_shader_resource;
 
 // An opaque handle to an object that manages all compiler state.
 typedef struct shaderc_spvc_context* shaderc_spvc_context_t;
+
+typedef struct {
+  uint32_t combined_id;
+  uint32_t image_id;
+  uint32_t sampler_id;
+} shaderc_spvc_combined_image_sampler;
+
+typedef struct {
+  shaderc_spvc_execution_model stage;
+  uint32_t desc_set;
+  uint32_t binding;
+  uint32_t msl_buffer;
+  uint32_t msl_texture;
+  uint32_t msl_sampler;
+} shaderc_spvc_msl_resource_binding;
+
+typedef struct {
+  uint32_t x;
+  uint32_t y;
+  uint32_t z;
+  uint32_t constant;
+} shaderc_spvc_workgroup_size;
+
+typedef struct {
+  uint32_t set;
+  uint32_t binding;
+  uint32_t id;
+  uint32_t base_type_id;
+  shaderc_spvc_binding_type binding_type;
+  shaderc_spvc_texture_view_dimension texture_dimension;
+  shaderc_spvc_texture_format_type texture_component_type;
+  bool multisampled;
+} shaderc_spvc_binding_info;
+
+typedef struct {
+  uint32_t id;
+  bool has_location;
+  uint32_t location;
+} shaderc_spvc_resource_location_info;
+
+typedef struct {
+  uint32_t location;
+  shaderc_spvc_texture_format_type type;
+} shaderc_spvc_resource_type_info;
 
 // Create a spvc state handle.  A return of NULL indicates that there was an
 // error. Any function operating on a *_context_t must offer the basic
@@ -321,7 +408,7 @@ shaderc_spvc_compile_shader(const shaderc_spvc_context_t context,
 // if |id| does not exist, returns an error.
 SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_decoration(
     const shaderc_spvc_context_t context, uint32_t id,
-    shaderc_spvc_decoration decoration, uint32_t* argument);
+    shaderc_spvc_decoration decoration, uint32_t* value);
 
 // Unset spirv_cross decoration (added for GLSL API support in Dawn)
 // Given an id and a decoration. Assuming |id| is valid.
@@ -341,12 +428,14 @@ SHADERC_EXPORT void shaderc_spvc_set_name(const shaderc_spvc_context_t context,
 SHADERC_EXPORT void shaderc_spvc_build_combined_image_samplers(
     const shaderc_spvc_context_t context);
 
-// For each combined_image_sampler, calls the provided callback function |f|,
-// passing in three arguments read from the combined_image_sampler.
-// (added for GLSL API support in Dawn)
-SHADERC_EXPORT void shaderc_spvc_for_each_combined_image_sampler(
+// Returns the combined image samplers.
+
+// If |samples| is NULL, then num_samplers is set, and no data is copied.
+// The caller is responsible for |samplers| being large enough to
+// contain all of the data.
+SHADERC_EXPORT void shaderc_spvc_get_combined_image_samplers(
     const shaderc_spvc_context_t context,
-    void (*f)(uint32_t, uint32_t, uint32_t));
+    shaderc_spvc_combined_image_sampler* samplers, size_t* num_samplers);
 
 // Set spirv_cross decoration (added for HLSL support in Dawn)
 // Given an id, decoration and argument, the decoration flag on the id is set
@@ -354,6 +443,69 @@ SHADERC_EXPORT void shaderc_spvc_for_each_combined_image_sampler(
 SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_set_decoration(
     const shaderc_spvc_context_t context, uint32_t id,
     shaderc_spvc_decoration decoration, uint32_t argument);
+
+// Adds a binding to indicate the MSL buffer, texture or sampler index to use
+// for a particular SPIR-V description set and binding.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_add_msl_resource_binding(
+    const shaderc_spvc_context_t context,
+    const shaderc_spvc_msl_resource_binding binding);
+
+// Gets workgroup size for an entry point defined by a given execution model and
+// function name.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_workgroup_size(
+    const shaderc_spvc_context_t context, const char* function_name,
+    shaderc_spvc_execution_model execution_model,
+    shaderc_spvc_workgroup_size* workgroup_size);
+
+// Gets whether or not the shader needes a buffer of buffer sizes.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_needs_buffer_size_buffer(
+    const shaderc_spvc_context_t context, bool* b);
+
+// Gets the execution model for the shader parsed by the compiler.
+SHADERC_EXPORT shaderc_spvc_status
+shaderc_spvc_get_execution_model(const shaderc_spvc_context_t context,
+                                 shaderc_spvc_execution_model* execution_model);
+
+// Gets the number of push constants buffers used by the shader.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_push_constant_buffer_count(
+    const shaderc_spvc_context_t context, size_t* count);
+
+// Fetches all of the binding info for a given shader resource.
+// If |bindings| is null, then |binding_count| is populated with the number of
+// entries that would have been written out.
+// The caller is responsible for ensuring that |bindings| has enough space
+// allocated to contain all of the entries.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_binding_info(
+    const shaderc_spvc_context_t context, shaderc_spvc_shader_resource resource,
+    shaderc_spvc_binding_type binding_type, shaderc_spvc_binding_info* bindings,
+    size_t* binding_count);
+
+// Fetches the Location decoration information for the stage inputs.
+// If |locations| is null, then |location_count| is populated with the number of
+// entries that would have been written out.
+// The caller is responsible for ensuring that |locations| has enough space
+// allocated to contain all of the entries.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_input_stage_location_info(
+    const shaderc_spvc_context_t context,
+    shaderc_spvc_resource_location_info* locations, size_t* location_count);
+
+// Fetches the Location decoration information for the stage outputs.
+// If |locations| is null, then |location_count| is populated with the number of
+// entries that would have been written out.
+// The caller is responsible for ensuring that |locations| has enough space
+// allocated to contain all of the entries.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_output_stage_location_info(
+    const shaderc_spvc_context_t context,
+    shaderc_spvc_resource_location_info* locations, size_t* location_count);
+
+// Fetches the type information for the stage outputs.
+// If |types| is null, then |type_count| is populated with the number of
+// entries that would have been written out.
+// The caller is responsible for ensuring that |types| has enough space
+// allocated to contain all of the entries.
+SHADERC_EXPORT shaderc_spvc_status shaderc_spvc_get_output_stage_type_info(
+    const shaderc_spvc_context_t context,
+    shaderc_spvc_resource_type_info* types, size_t* type_count);
 
 // The following functions, operating on shaderc_spvc_compilation_result_t
 // objects, offer only the basic thread-safety guarantee.
