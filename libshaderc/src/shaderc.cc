@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -277,6 +278,8 @@ shaderc_util::Compiler::TargetEnv GetCompilerTargetEnv(shaderc_target_env env) {
       return shaderc_util::Compiler::TargetEnv::OpenGL;
     case shaderc_target_env_opengl_compat:
       return shaderc_util::Compiler::TargetEnv::OpenGLCompat;
+    case shaderc_target_env_webgpu:
+      return shaderc_util::Compiler::TargetEnv::WebGPU;
     case shaderc_target_env_vulkan:
     default:
       break;
@@ -550,14 +553,16 @@ void shaderc_compile_options_set_nan_clamp(shaderc_compile_options_t options,
 }
 
 shaderc_compiler_t shaderc_compiler_initialize() {
-  static shaderc_util::GlslangInitializer* initializer =
-      new shaderc_util::GlslangInitializer;
   shaderc_compiler_t compiler = new (std::nothrow) shaderc_compiler;
-  compiler->initializer = initializer;
+  if (compiler) {
+    compiler->initializer.reset(new shaderc_util::GlslangInitializer);
+  }
   return compiler;
 }
 
-void shaderc_compiler_release(shaderc_compiler_t compiler) { delete compiler; }
+void shaderc_compiler_release(shaderc_compiler_t compiler) {
+  delete compiler;
+}
 
 namespace {
 shaderc_compilation_result_t CompileToSpecifiedOutputType(
@@ -602,7 +607,7 @@ shaderc_compilation_result_t CompileToSpecifiedOutputType(
               // We need to make this a reference wrapper, so that std::function
               // won't make a copy for this callable object.
               std::ref(stage_deducer), includer, output_type, &errors,
-              &total_warnings, &total_errors, compiler->initializer);
+              &total_warnings, &total_errors);
     } else {
       // Compile with default options.
       InternalFileIncluder includer;
@@ -611,7 +616,7 @@ shaderc_compilation_result_t CompileToSpecifiedOutputType(
           shaderc_util::Compiler().Compile(
               source_string, forced_stage, input_file_name_str, entry_point_name,
               std::ref(stage_deducer), includer, output_type, &errors,
-              &total_warnings, &total_errors, compiler->initializer);
+              &total_warnings, &total_errors);
     }
 
     result->messages = errors.str();

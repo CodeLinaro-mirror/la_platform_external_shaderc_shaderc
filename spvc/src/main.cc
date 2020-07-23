@@ -38,6 +38,7 @@ Usage: spvc [options] file
 An input file of - represents standard input.
 
 Options:
+  -h                       Display available options.
   --help                   Display available options.
   -v                       Display compiler version information.
   -o <output file>         '-' means standard output.
@@ -120,21 +121,71 @@ bool ReadFile(const std::string& path, std::vector<uint32_t>* out) {
   return true;
 }
 
+bool StringPieceToEnvEnum(const string_piece& str, shaderc_spvc_spv_env* env) {
+  if (!env) {
+    std::cerr << "spvc: error: internal error calling StringPieceToEnvEnum"
+              << std::endl;
+    return false;
+  }
+
+  if (str == "vulkan1.0") {
+    *env = shaderc_spvc_spv_env_vulkan_1_0;
+  } else if (str == "vulkan1.1") {
+    *env = shaderc_spvc_spv_env_vulkan_1_1;
+  } else if (str == "webgpu0") {
+    *env = shaderc_spvc_spv_env_webgpu_0;
+  } else {
+    std::cerr << "spvc: error: invalid value '" << str
+              << "' in --source-env= or --target-env=" << std::endl;
+    return false;
+  }
+  return true;
+}
+
 }  // anonymous namespace
 
 int main(int argc, char** argv) {
   shaderc_spvc::Context context;
-  shaderc_spvc::CompileOptions options;
   std::vector<uint32_t> input;
   std::vector<uint32_t> msl_discrete_descriptor;
   string_piece output_path;
   string_piece output_language;
-  string_piece source_env = "vulkan1.0";
-  string_piece target_env = "";
+  string_piece source_str = "vulkan1.0";
+  string_piece target_str = "";
 
+  // Scan and find any source and target env flags, since we need to know those
+  // to create options.
   for (int i = 1; i < argc; ++i) {
     const string_piece arg = argv[i];
-    if (arg == "--help") {
+    if (arg.starts_with("--source-env=")) {
+      string_piece env;
+      shaderc_util::GetOptionArgument(argc, argv, &i, "--source-env=", &env);
+      source_str = env;
+    } else if (arg.starts_with("--target-env=")) {
+      string_piece env;
+      shaderc_util::GetOptionArgument(argc, argv, &i, "--target-env=", &env);
+      target_str = env;
+    }
+  }
+
+  if (target_str == "") {
+    target_str = source_str;
+  }
+
+  shaderc_spvc_spv_env source_env;
+  if (!StringPieceToEnvEnum(source_str, &source_env)) {
+    return 1;
+  }
+
+  shaderc_spvc_spv_env target_env;
+  if (!StringPieceToEnvEnum(target_str, &target_env)) {
+    return 1;
+  }
+
+  shaderc_spvc::CompileOptions options(source_env, target_env);
+  for (int i = 1; i < argc; ++i) {
+    const string_piece arg = argv[i];
+    if (arg == "--help" || arg == "-h") {
       ::PrintHelp(&std::cout);
       return 0;
     } else if (arg == "-v") {
@@ -187,11 +238,11 @@ int main(int argc, char** argv) {
       }
     } else if (arg == "--remove-unused-variables") {
       options.SetRemoveUnusedVariables(true);
-    } else if (arg == "--no-validate"){
+    } else if (arg == "--no-validate") {
       options.SetValidate(false);
-    } else if (arg == "--no-optimize"){
+    } else if (arg == "--no-optimize") {
       options.SetOptimize(false);
-    } else if (arg == "--robust-buffer-access-pass"){
+    } else if (arg == "--robust-buffer-access-pass") {
       options.SetRobustBufferAccessPass(true);
     } else if (arg == "--vulkan-semantics") {
       options.SetVulkanSemantics(true);
@@ -258,41 +309,9 @@ int main(int argc, char** argv) {
       }
       options.SetHLSLShaderModel(shader_model_num);
     } else if (arg.starts_with("--source-env=")) {
-      string_piece env;
-      shaderc_util::GetOptionArgument(argc, argv, &i, "--source-env=", &env);
-      source_env = env;
-      if (env == "vulkan1.0") {
-        options.SetSourceEnvironment(shaderc_target_env_vulkan,
-                                     shaderc_env_version_vulkan_1_0);
-      } else if (env == "vulkan1.1") {
-        options.SetSourceEnvironment(shaderc_target_env_vulkan,
-                                     shaderc_env_version_vulkan_1_1);
-      } else if (env == "webgpu0") {
-        options.SetSourceEnvironment(shaderc_target_env_webgpu,
-                                     shaderc_env_version_webgpu);
-      } else {
-        std::cerr << "spvc: error: invalid value '" << env
-                  << "' in --source-env=" << std::endl;
-        return 1;
-      }
+      // Parsed in the previous iteration
     } else if (arg.starts_with("--target-env=")) {
-      string_piece env;
-      shaderc_util::GetOptionArgument(argc, argv, &i, "--target-env=", &env);
-      target_env = env;
-      if (env == "vulkan1.0") {
-        options.SetTargetEnvironment(shaderc_target_env_vulkan,
-                                     shaderc_env_version_vulkan_1_0);
-      } else if (env == "vulkan1.1") {
-        options.SetTargetEnvironment(shaderc_target_env_vulkan,
-                                     shaderc_env_version_vulkan_1_1);
-      } else if (env == "webgpu0") {
-        options.SetTargetEnvironment(shaderc_target_env_webgpu,
-                                     shaderc_env_version_webgpu);
-      } else {
-        std::cerr << "spvc: error: invalid value '" << env
-                  << "' in --target-env=" << std::endl;
-        return 1;
-      }
+      // Parsed in the previous iteration
     } else if (arg == "--use-spvc-parser") {
       context.SetUseSpvcParser(true);
     } else {
@@ -300,24 +319,6 @@ int main(int argc, char** argv) {
         std::cerr << "spvc: error: could not read file" << std::endl;
         return 1;
       }
-    }
-  }
-
-  if (target_env == "") {
-    if (source_env == "vulkan1.0") {
-      options.SetTargetEnvironment(shaderc_target_env_vulkan,
-                                   shaderc_env_version_vulkan_1_0);
-    } else if (source_env == "vulkan1.1") {
-      options.SetTargetEnvironment(shaderc_target_env_vulkan,
-                                   shaderc_env_version_vulkan_1_1);
-    } else if (source_env == "webgpu0") {
-      options.SetTargetEnvironment(shaderc_target_env_webgpu,
-                                   shaderc_env_version_webgpu);
-    } else {
-      // This should be caught above when parsing --source-target=
-      std::cerr << "spvc: error: invalid value '" << source_env
-                << "' in --source-env=" << std::endl;
-      return 1;
     }
   }
 
