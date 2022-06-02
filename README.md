@@ -96,7 +96,6 @@ See Glslang's `ENABLE_HLSL` CMake setting.)
 git clone https://github.com/google/shaderc $SOURCE_DIR
 cd $SOURCE_DIR
 ./utils/git-sync-deps
-cd $SOURCE_DIR/
 ```
 
 **Note:** The [known-good](https://github.com/google/shaderc/tree/known-good)
@@ -177,7 +176,7 @@ On Linux, the following tools should be installed:
 
 On Linux, if cross compiling to Windows:
 - [`mingw`](http://www.mingw.org): A GCC-based cross compiler targeting Windows
-    so that generated executables use the Micrsoft C runtime libraries.
+    so that generated executables use the Microsoft C runtime libraries.
 
 On Windows, the following tools should be installed and available on your path:
 
@@ -249,6 +248,7 @@ older versions of Shaderc and its dependencies.
 * **Rust:** [shaderc-rs][shaderc-rs]
 * **Go:** [gshaderc][gshaderc]
 * **.NET:** [shaderc.net][shadercdotnet]
+* **Common Lisp:** [shadercl][shaderccommonlisp]
 
 [khr-glslang]: https://github.com/KhronosGroup/glslang
 [spirv-tools]: https://github.com/KhronosGroup/SPIRV-Tools
@@ -259,3 +259,4 @@ older versions of Shaderc and its dependencies.
 [dawn]: https://dawn.googlesource.com/dawn
 [gshaderc]: https://github.com/celer/gshaderc
 [shadercdotnet]: https://github.com/jpbruyere/shaderc.net
+[shaderccommonlisp]: https://github.com/JolifantoBambla/shadercl

@@ -65,6 +65,9 @@ Options:
                     Automatically assign locations to uniform variables that
                     don't have an explicit 'location' layout in the shader
                     source.
+  -fauto-combined-image-sampler
+                    Removes sampler variables and converts existing textures
+                    to combined image-samplers.
   -fentry-point=<name>
                     Specify the entry point name for HLSL compilation, for
                     all subsequent source files.  Default is "main".
@@ -128,7 +131,6 @@ Options:
                     Valid stages are vertex, vert, fragment, frag, tesscontrol,
                     tesc, tesseval, tese, geometry, geom, compute, and comp.
   -g                Generate source-level debug information.
-                    Currently this option has no effect.
   -h                Display available options.
   --help            Display available options.
   -I <value>        Add directory to include search path.
@@ -161,6 +163,7 @@ Options:
                         vulkan1.0       # The default
                         vulkan1.1
                         vulkan1.2
+                        vulkan1.3
                         vulkan          # Same as vulkan1.0
                         opengl4.5
                         opengl          # Same as opengl4.5
@@ -171,8 +174,9 @@ Options:
                     For example, default for vulkan1.0 is spv1.0, and
                     the default for vulkan1.1 is spv1.3,
                     the default for vulkan1.2 is spv1.5.
+                    the default for vulkan1.3 is spv1.6.
                     Values are:
-                        spv1.0, spv1.1, spv1.2, spv1.3, spv1.4, spv1.5
+                        spv1.0, spv1.1, spv1.2, spv1.3, spv1.4, spv1.5, spv1.6
   --version         Display compiler version information.
   -w                Suppresses all warning messages.
   -Werror           Treat all warnings as errors.

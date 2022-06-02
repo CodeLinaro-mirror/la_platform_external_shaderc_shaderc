@@ -43,11 +43,12 @@ def vulkan_compute_subgroup_shader():
 
 
 @inside_glslc_testsuite('OptionTargetEnv')
-class TestTargetEnvEqOpenglCompatWithOpenGlCompatShader(expect.ValidObjectFile):
+class TestTargetEnvEqOpenglCompatWithOpenGlCompatShader(expect.ErrorMessageSubstr):
     """Tests that compiling OpenGL Compatibility Fragment shader with
     --target-env=opengl_compat works correctly"""
     shader = FileShader(opengl_compat_fragment_shader(), '.frag')
     glslc_args = ['--target-env=opengl_compat', '-c', shader]
+    expected_error_substr = "error: opengl_compat is no longer supported"
 
 
 @inside_glslc_testsuite('OptionTargetEnv')
@@ -56,18 +57,17 @@ class TestTargetEnvEqOpenglWithOpenGlCompatShader(expect.ErrorMessageSubstr):
     with --target-env=opengl"""
     shader = FileShader(opengl_compat_fragment_shader(), '.frag')
     glslc_args = ['--target-env=opengl', shader]
-    expected_error_substr = [shader, ":4: error: 'assign' :  ",
-                             "cannot convert from ' const float' to ",
-                             "'layout( location=0) out 4-component ",
-                             "vector of float"]
+    # Glslang does not give a pretty message. Make sure we get an error.
+    expected_error_substr = "errors generated"
 
 
 @inside_glslc_testsuite('OptionTargetEnv')
-class TestTargetEnvEqOpenglCompatWithOpenGlVertexShader(expect.ValidObjectFile):
+class TestTargetEnvEqOpenglCompatWithOpenGlVertexShader(expect.ErrorMessageSubstr):
     """Tests that compiling OpenGL vertex shader with --target-env=opengl_compat
     generates valid SPIR-V code"""
     shader = FileShader(opengl_vertex_shader(), '.vert')
     glslc_args = ['--target-env=opengl_compat', '-c', shader]
+    expected_error_substr = "error: opengl_compat is no longer supported"
 
 
 @inside_glslc_testsuite('OptionTargetEnv')
@@ -129,6 +129,16 @@ class TestTargetEnvEqVulkan1_2WithVulkan1_0ShaderSucceeds(expect.ValidObjectFile
 class TestTargetEnvEqVulkan1_2WithVulkan1_1ShaderSucceeds(expect.ValidObjectFile1_5):
     shader = FileShader(vulkan_compute_subgroup_shader(), '.comp')
     glslc_args = ['--target-env=vulkan1.2', '-c', shader]
+
+@inside_glslc_testsuite('OptionTargetEnv')
+class TestTargetEnvEqVulkan1_2WithVulkan1_0ShaderSucceeds(expect.ValidObjectFile1_6):
+    shader = FileShader(vulkan_vertex_shader(), '.vert')
+    glslc_args = ['--target-env=vulkan1.3', '-c', shader]
+
+@inside_glslc_testsuite('OptionTargetEnv')
+class TestTargetEnvEqVulkan1_2WithVulkan1_1ShaderSucceeds(expect.ValidObjectFile1_6):
+    shader = FileShader(vulkan_compute_subgroup_shader(), '.comp')
+    glslc_args = ['--target-env=vulkan1.3', '-c', shader]
 
 @inside_glslc_testsuite('OptionTargetEnv')
 class TestTargetEnvEqOpenGL4_5WithOpenGLShaderSucceeds(expect.ValidObjectFile):

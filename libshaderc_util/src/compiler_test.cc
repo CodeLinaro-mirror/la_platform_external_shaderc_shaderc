@@ -165,7 +165,7 @@ void main() { o = clamp(i, vec4(0.5), vec4(1.0)); }
 std::string Disassemble(const std::vector<uint32_t> binary) {
   std::string result;
   shaderc_util::SpirvToolsDisassemble(Compiler::TargetEnv::Vulkan,
-                                      Compiler::TargetEnvVersion::Vulkan_1_2,
+                                      Compiler::TargetEnvVersion::Vulkan_1_3,
                                       binary, &result);
   return result;
 }
@@ -265,23 +265,23 @@ TEST_F(CompilerTest, SimpleVulkanShaderCompilesWithDefaultCompilerSettings) {
   EXPECT_TRUE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
 }
 
-TEST_F(CompilerTest, RespectTargetEnvOnOpenGLShader) {
+TEST_F(CompilerTest, OpenGLCompatibilityProfileNotSupported) {
   const EShLanguage stage = EShLangVertex;
 
   compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGLCompat);
-  EXPECT_TRUE(SimpleCompilationSucceeds(kOpenGLVertexShader, stage));
+  EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLVertexShader, stage));
+  EXPECT_EQ(errors_, "error: OpenGL compatibility profile is not supported");
+}
+
+TEST_F(CompilerTest, RespectTargetEnvOnOpenGLShaderForOpenGLShader) {
+  const EShLanguage stage = EShLangVertex;
 
   compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
   EXPECT_TRUE(SimpleCompilationSucceeds(kOpenGLVertexShader, stage));
 }
 
 TEST_F(CompilerTest, RespectTargetEnvOnOpenGLShaderWhenDeducingStage) {
-  const EShLanguage stage = EShLangCount;
-
-  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGLCompat);
-  EXPECT_TRUE(
-      SimpleCompilationSucceeds(kOpenGLVertexShaderDeducibleStage, stage));
-
+  const EShLanguage stage = EShLangVertex;
   compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGL);
   EXPECT_TRUE(
       SimpleCompilationSucceeds(kOpenGLVertexShaderDeducibleStage, stage));
@@ -304,6 +304,14 @@ TEST_F(CompilerTest, VulkanSpecificShaderFailsUnderOpenGLRules) {
 
 TEST_F(CompilerTest, OpenGLSpecificShaderFailsUnderDefaultRules) {
   EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLVertexShader, EShLangVertex));
+}
+
+TEST_F(CompilerTest,
+       OpenGLCompatibilitySpecificShaderFailsUnderOpenGLCompatibilityRules) {
+  // OpenGLCompat mode now errors out.  It's been deprecated for a long time.
+  compiler_.SetTargetEnv(Compiler::TargetEnv::OpenGLCompat);
+  EXPECT_FALSE(SimpleCompilationSucceeds(kOpenGLCompatibilityFragShader,
+                                         EShLangFragment));
 }
 
 TEST_F(CompilerTest, OpenGLCompatibilitySpecificShaderFailsUnderOpenGLRules) {
@@ -377,6 +385,12 @@ TEST_F(CompilerTest, SpirvTargetVersion1_4Succeeds) {
 
 TEST_F(CompilerTest, SpirvTargetVersion1_5Succeeds) {
   compiler_.SetTargetSpirv(Compiler::SpirvVersion::v1_5);
+  EXPECT_TRUE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
+  EXPECT_THAT(errors_, Eq(""));
+}
+
+TEST_F(CompilerTest, SpirvTargetVersion1_6Succeeds) {
+  compiler_.SetTargetSpirv(Compiler::SpirvVersion::v1_6);
   EXPECT_TRUE(SimpleCompilationSucceeds(kVulkanVertexShader, EShLangVertex));
   EXPECT_THAT(errors_, Eq(""));
 }

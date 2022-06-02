@@ -28,7 +28,7 @@
 #include "file_compiler.h"
 #include "libshaderc_util/args.h"
 #include "libshaderc_util/compiler.h"
-#include "libshaderc_util/io.h"
+#include "libshaderc_util/io_shaderc.h"
 #include "libshaderc_util/string_piece.h"
 #include "resource_parse.h"
 #include "shader_stage.h"
@@ -61,6 +61,9 @@ Options:
                     Automatically assign locations to uniform variables that
                     don't have an explicit 'location' layout in the shader
                     source.
+  -fauto-combined-image-sampler
+                    Removes sampler variables and converts existing textures
+                    to combined image-samplers.
   -fentry-point=<name>
                     Specify the entry point name for HLSL compilation, for
                     all subsequent source files.  Default is "main".
@@ -124,7 +127,6 @@ Options:
                     Valid stages are vertex, vert, fragment, frag, tesscontrol,
                     tesc, tesseval, tese, geometry, geom, compute, and comp.
   -g                Generate source-level debug information.
-                    Currently this option has no effect.
   -h                Display available options.
   --help            Display available options.
   -I <value>        Add directory to include search path.
@@ -157,6 +159,7 @@ Options:
                         vulkan1.0       # The default
                         vulkan1.1
                         vulkan1.2
+                        vulkan1.3
                         vulkan          # Same as vulkan1.0
                         opengl4.5
                         opengl          # Same as opengl4.5
@@ -167,8 +170,9 @@ Options:
                     For example, default for vulkan1.0 is spv1.0, and
                     the default for vulkan1.1 is spv1.3,
                     the default for vulkan1.2 is spv1.5.
+                    the default for vulkan1.3 is spv1.6.
                     Values are:
-                        spv1.0, spv1.1, spv1.2, spv1.3, spv1.4, spv1.5
+                        spv1.0, spv1.1, spv1.2, spv1.3, spv1.4, spv1.5, spv1.6
   --version         Display compiler version information.
   -w                Suppresses all warning messages.
   -Werror           Treat all warnings as errors.
@@ -307,6 +311,8 @@ int main(int argc, char** argv) {
       }
     } else if (arg == "-fauto-bind-uniforms") {
       compiler.options().SetAutoBindUniforms(true);
+    } else if (arg == "-fauto-combined-image-sampler") {
+      compiler.options().SetAutoSampledTextures(true);
     } else if (arg == "-fauto-map-locations") {
       compiler.options().SetAutoMapLocations(true);
     } else if (arg == "-fhlsl-iomap") {
@@ -434,6 +440,9 @@ int main(int argc, char** argv) {
       } else if (target_env_str == "vulkan1.2") {
         target_env = shaderc_target_env_vulkan;
         version = shaderc_env_version_vulkan_1_2;
+      } else if (target_env_str == "vulkan1.3") {
+        target_env = shaderc_target_env_vulkan;
+        version = shaderc_env_version_vulkan_1_3;
       } else if (target_env_str == "opengl") {
         target_env = shaderc_target_env_opengl;
       } else if (target_env_str == "opengl4.5") {
@@ -441,6 +450,9 @@ int main(int argc, char** argv) {
         version = shaderc_env_version_opengl_4_5;
       } else if (target_env_str == "opengl_compat") {
         target_env = shaderc_target_env_opengl_compat;
+        std::cerr << "glslc: error: opengl_compat is no longer supported"
+                  << std::endl;
+        return 1;
       } else {
         std::cerr << "glslc: error: invalid value '" << target_env_str
                   << "' in '--target-env=" << target_env_str << "'"
@@ -463,6 +475,8 @@ int main(int argc, char** argv) {
         ver = shaderc_spirv_version_1_4;
       } else if (ver_str == "spv1.5") {
         ver = shaderc_spirv_version_1_5;
+      } else if (ver_str == "spv1.6") {
+        ver = shaderc_spirv_version_1_6;
       } else {
         std::cerr << "glslc: error: invalid value '" << ver_str
                   << "' in '--target-spv=" << ver_str << "'" << std::endl;

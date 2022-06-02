@@ -40,6 +40,26 @@ else()
   message(STATUS "Configuring Shaderc to avoid building tests.")
 endif()
 
+option(SHADERC_SKIP_EXAMPLES "Skip building examples" ${SHADERC_SKIP_EXAMPLES})
+if(NOT ${SHADERC_SKIP_EXAMPLES})
+  set(SHADERC_ENABLE_EXAMPLES ON)
+endif()
+if(${SHADERC_ENABLE_EXAMPLES})
+  message(STATUS "Configuring Shaderc to build examples.")
+else()
+  message(STATUS "Configuring Shaderc to avoid building examples.")
+endif()
+
+option(SHADERC_SKIP_COPYRIGHT_CHECK "Skip copyright check" ${SHADERC_SKIP_COPYRIGHT_CHECK})
+if(NOT ${SHADERC_SKIP_COPYRIGHT_CHECK})
+  set(SHADERC_ENABLE_COPYRIGHT_CHECK ON)
+endif()
+if(${SHADERC_ENABLE_COPYRIGHT_CHECK})
+  message(STATUS "Configuring Shaderc to check copyrights.")
+else()
+  message(STATUS "Configuring Shaderc to avoid checking copyrights.")
+endif()
+
 option(SHADERC_ENABLE_WERROR_COMPILE "Enable passing -Werror to compiler, if available" ON)
 
 set (CMAKE_CXX_STANDARD 11)
@@ -72,11 +92,13 @@ endif()
 
 find_host_package(PythonInterp 3 REQUIRED)
 
-add_custom_target(check-copyright ALL
-  ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/utils/add_copyright.py
-  --check
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  COMMENT "Check copyright")
+if (SHADERC_ENABLE_COPYRIGHT_CHECK)
+  add_custom_target(check-copyright ALL
+    ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/utils/add_copyright.py
+    --check
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Check copyright")
+endif()
 
 add_custom_target(add-copyright
   ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/utils/add_copyright.py
@@ -107,7 +129,9 @@ add_subdirectory(third_party)
 add_subdirectory(libshaderc_util)
 add_subdirectory(libshaderc)
 add_subdirectory(glslc)
-add_subdirectory(examples)
+if(${SHADERC_ENABLE_EXAMPLES})
+    add_subdirectory(examples)
+endif()
 
 add_custom_target(build-version
   ${PYTHON_EXECUTABLE}

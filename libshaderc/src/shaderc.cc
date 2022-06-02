@@ -279,7 +279,8 @@ shaderc_util::Compiler::TargetEnv GetCompilerTargetEnv(shaderc_target_env env) {
     case shaderc_target_env_opengl_compat:
       return shaderc_util::Compiler::TargetEnv::OpenGLCompat;
     case shaderc_target_env_webgpu:
-      return shaderc_util::Compiler::TargetEnv::WebGPU;
+      assert(false);
+      break;
     case shaderc_target_env_vulkan:
     default:
       break;
@@ -303,6 +304,10 @@ shaderc_util::Compiler::TargetEnvVersion GetCompilerTargetEnvVersion(
   if (static_cast<uint32_t>(Compiler::TargetEnvVersion::Vulkan_1_2) ==
       version_number) {
     return Compiler::TargetEnvVersion::Vulkan_1_2;
+  }
+  if (static_cast<uint32_t>(Compiler::TargetEnvVersion::Vulkan_1_3) ==
+      version_number) {
+    return Compiler::TargetEnvVersion::Vulkan_1_3;
   }
   if (static_cast<uint32_t>(Compiler::TargetEnvVersion::OpenGL_4_5) ==
       version_number) {
@@ -494,6 +499,11 @@ void shaderc_compile_options_set_limit(shaderc_compile_options_t options,
 void shaderc_compile_options_set_auto_bind_uniforms(
     shaderc_compile_options_t options, bool auto_bind) {
   options->compiler.SetAutoBindUniforms(auto_bind);
+}
+
+void shaderc_compile_options_set_auto_combined_image_sampler(
+    shaderc_compile_options_t options, bool upgrade) {
+  options->compiler.SetAutoCombinedImageSampler(upgrade);
 }
 
 void shaderc_compile_options_set_hlsl_io_mapping(
